@@ -59,9 +59,10 @@ from distutils.dir_util import copy_tree
 TRITON_VERSION_MAP = {'2.7.0dev': ('21.01dev', '20.11', '1.5.3', '2020.4')}
 
 EXAMPLE_BACKENDS = ['identity', 'square', 'repeat']
-CORE_BACKENDS = ['tensorrt', 'custom', 'ensemble']
+CORE_BACKENDS = ['tensorrt', 'ensemble']
 NONCORE_BACKENDS = [
-    'tensorflow1', 'tensorflow2', 'onnxruntime', 'python', 'dali', 'pytorch'
+    'tensorflow1', 'tensorflow2', 'onnxruntime', 'python', 'dali', 'pytorch',
+    'custom'
 ]
 FLAGS = None
 
@@ -233,8 +234,6 @@ def core_cmake_args(components, backends, install_dir):
                 be.upper(), cmake_enable(be in backends)))
         if (be in CORE_BACKENDS) and (be in backends):
             if be == 'tensorrt':
-                pass
-            elif be == 'custom':
                 pass
             elif be == 'ensemble':
                 pass

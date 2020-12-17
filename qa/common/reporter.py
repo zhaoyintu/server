@@ -47,8 +47,12 @@ ENVS = [
 def annotate(datas):
     # Add all interesting envvar values
     for data in datas:
+        print("All environment variables===>")
+        for env in os.environ:
+            print("{} = {}".format(env, os.environ[env]))
         for env in ENVS:
             if env in os.environ:
+                print("FOUND \"{}\"".format(env))
                 val = os.environ[env]
                 data['s_' + env.lower()] = val
 

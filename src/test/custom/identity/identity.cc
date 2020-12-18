@@ -116,9 +116,11 @@ Context::Context(
     : CustomInstance(instance_name, model_config, gpu_device),
       execute_delay_ms_(0), suppress_outputs_(false)
 {
+  LOG_ERROR << "instance_name: " << instance_name << std::endl;
   if (model_config_.parameters_size() > 0) {
     const auto itr = model_config_.parameters().find("execute_delay_ms");
     if (itr != model_config_.parameters().end()) {
+        LOG_ERROR << "Exec Delay String1: " << itr->second.string_value() << std::endl;
       execute_delay_ms_ = std::stoi(itr->second.string_value());
 
       // Apply delay multiplier based on instance index, this is not taking
@@ -127,6 +129,7 @@ Context::Context(
       const auto mitr =
           model_config_.parameters().find("instance_wise_delay_multiplier");
       if (mitr != model_config_.parameters().end()) {
+        LOG_ERROR << "Multiplier String1: " << mitr->second.string_value() << std::endl;
         int multiplier = std::stoi(mitr->second.string_value());
 
         size_t suffix_pos;
@@ -139,6 +142,7 @@ Context::Context(
         }
         auto idx_pos = instance_name.rfind('_', suffix_pos - 1) + 1;
 
+        LOG_ERROR << "Multiplier String2: " << instance_name.substr(idx_pos, suffix_pos - idx_pos) << std::endl;
         multiplier *=
             std::stoi(instance_name.substr(idx_pos, suffix_pos - idx_pos));
         execute_delay_ms_ *= std::max(multiplier, 1);

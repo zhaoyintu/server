@@ -47,7 +47,7 @@ rm -f *.log.*
 CLIENT_LOG=`pwd`/client.log
 DATADIR=`pwd`/models
 SERVER=/opt/tritonserver/bin/tritonserver
-SERVER_ARGS="--model-repository=$DATADIR"
+SERVER_ARGS="--model-repository=$DATADIR --log-verbose=1"
 source ../common/util.sh
 
 mkdir -p $DATADIR/custom_identity_int32/1

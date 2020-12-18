@@ -271,6 +271,42 @@ function run_server_leakcheck () {
     fi
 }
 
+# Kill inference server. SERVER_PID must be set to the server's pid.
+function kill_server () {
+    # Under WSL the linux PID is not the same as the windows PID and
+    # there doesn't seem to be a way to find the mapping between
+    # them. So we instead assume that this test is the only test
+    # running on the system and just SIGINT all the tritonserver
+    # windows executables running on the system.
+    if [[ "$(< /proc/sys/kernel/osrelease)" == *Microsoft ]]; then
+        # Disable -x as it makes output below hard to read
+        [ -o xtrace ] && ts='set -x' || ts='set +x'
+        set +x
+
+        tasklist=$(/mnt/c/windows/system32/tasklist.exe /FI 'IMAGENAME eq tritonserver.exe' /FO CSV)
+        echo "=== Windows tritonserver tasks"
+        echo "$tasklist"
+
+        taskcount=$(echo "$tasklist" | grep -c tritonserver)
+        if (( $taskcount > 0 )); then
+            echo "$tasklist" | while IFS=, read -r taskname taskpid taskrest; do
+                if [[ "$taskname" == "\"tritonserver.exe\"" ]]; then
+                    taskpid="${taskpid%\"}"
+                    taskpid="${taskpid#\"}"
+                    echo "=== killing windows tritonserver.exe task $taskpid"
+#                    windows-kill.exe -SIGINT $taskpid
+                fi
+            done
+        fi
+
+        eval "$ts"
+    else
+        # Non-windows...
+        kill $SERVER_PID
+        wait $SERVER_PID
+    fi
+}
+
 # Run nvidia-smi to monitor GPU utilization.
 # Writes utilization into MONITOR_LOG. If MONITOR_ID is specified only
 # that GPU PCI bus ID is monitored.

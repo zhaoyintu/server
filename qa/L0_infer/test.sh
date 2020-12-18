@@ -270,8 +270,7 @@ for TARGET in cpu gpu; do
 
     set -e
 
-    kill $SERVER_PID
-    wait $SERVER_PID
+    kill_server
 
     set +e
     if [ "$TEST_VALGRIND" -eq 1 ]; then

@@ -66,8 +66,8 @@ sleep 5
 
 # Get the input image to be used for generating requests
 STATIC_BATCH=1
-curl -O https://raw.githubusercontent.com/pytorch/serve/master/docs/images/kitten_small.jpg
-echo "{\"data\":[{\"TORCHSERVE_INPUT\" : [\"kitten_small.jpg\"]}]}" >> data.json
+curl -O https://raw.githubusercontent.com/pytorch/serve/master/examples/image_classifier/kitten.jpg
+echo "{\"data\":[{\"TORCHSERVE_INPUT\" : [\"kitten.jpg\"]}]}" >> data.json
 NAME=${MODEL_NAME}_sbatch${STATIC_BATCH}
 PERF_ANALYZER_ARGS="-m resnet50 --service-kind torchserve -i http -u localhost:8080 -b ${STATIC_BATCH} -p 5000 --input-data data.json"
 

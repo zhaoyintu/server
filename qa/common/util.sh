@@ -209,10 +209,12 @@ function run_server_tolive () {
     fi
 }
 
-# Run inference server and return immediately. Sets SERVER_PID to pid
-# of SERVER, or 0 if error
+# Run inference server and return immediately. Sets SERVER_PID (and
+# SERVER_WIN_PID if running on windows) to pid of SERVER, or 0 if
+# error.
 function run_server_nowait () {
     SERVER_PID=0
+    SERVER_WIN_PID=0
 
     if [ -z "$SERVER" ]; then
         echo "=== SERVER must be defined"
@@ -230,8 +232,51 @@ function run_server_nowait () {
       echo "=== Running LD_PRELOAD=$SERVER_LD_PRELOAD $SERVER $SERVER_ARGS"
     fi
 
-    LD_PRELOAD=$SERVER_LD_PRELOAD $SERVER $SERVER_ARGS > $SERVER_LOG 2>&1 &
-    SERVER_PID=$!
+    # WSL doesn't implement full bash job control so we must follow
+    # the example from
+    # https://gist.github.com/davidbailey00/004da18b89fff0534edd9b6f6082bcaf
+    # when launching and capture both win and linux pids and then use
+    # them appropriately in kill_server().
+    if [[ "$(< /proc/sys/kernel/osrelease)" == *Microsoft ]]; then
+        # LD_PRELOAD not yet supported
+
+        if [[ $SERVER_ARGS != '' ]]; then
+            argumentlist="-ArgumentList \"$SERVER_ARGS\""
+        fi
+
+        powershell_command="
+\$process = Start-Process -NoNewWindow -PassThru \"$SERVER\" $argumentlist
+                            if (\$process) {
+                              echo \$process.id;
+                              Wait-Process \$process.id;
+                              exit \$process.ExitCode;
+                            } else {
+                              echo -1
+                            }"
+
+        echo "*****"
+        echo $powershell_command
+        
+        # The first line in the SERVER_LOG will be the windows
+        # pid. Use tail to extract it.
+        powershell.exe -Command "$powershell_command" > $SERVER_LOG 2>&1 &
+        SERVER_PID=$!
+
+        while read -r line; do
+            SERVER_WIN_PID=$(echo $line | tr -d '\r\n')
+            break # pid on first line
+        done < <(tail -f $SERVER_LOG)
+
+        if [[ $SERVER_WIN_PID == -1 ]]; then
+            echo "=== Failed launching windows server."
+            SERVER_PID=0
+            SERVER_WIN_PID=0
+        fi
+    else
+        # Non-windows...
+        LD_PRELOAD=$SERVER_LD_PRELOAD $SERVER $SERVER_ARGS > $SERVER_LOG 2>&1 &
+        SERVER_PID=$!
+    fi
 }
 
 # Run inference server inside a memory management tool like Valgrind/ASAN.
@@ -271,13 +316,11 @@ function run_server_leakcheck () {
     fi
 }
 
-# Kill inference server. SERVER_PID must be set to the server's pid.
+# Kill inference server. SERVER_PID must be set to the server's pid
+# (on windows SERVER_WIN_PID must also be set).
 function kill_server () {
-    # Under WSL the linux PID is not the same as the windows PID and
-    # there doesn't seem to be a way to find the mapping between
-    # them. So we instead assume that this test is the only test
-    # running on the system and just SIGINT all the tritonserver
-    # windows executables running on the system.
+    # Under WSL the linux PID is not the same as the windows PID so we
+    # must explicitly kill both.
     if [[ "$(< /proc/sys/kernel/osrelease)" == *Microsoft ]]; then
         # Disable -x as it makes output below hard to read
         [ -o xtrace ] && ts='set -x' || ts='set +x'
@@ -287,24 +330,15 @@ function kill_server () {
         echo "=== Windows tritonserver tasks"
         echo "$tasklist"
 
-        taskcount=$(echo "$tasklist" | grep -c tritonserver)
-        if (( $taskcount > 0 )); then
-            echo "$tasklist" | while IFS=, read -r taskname taskpid taskrest; do
-                if [[ "$taskname" == "\"tritonserver.exe\"" ]]; then
-                    taskpid="${taskpid%\"}"
-                    taskpid="${taskpid#\"}"
-                    echo "=== killing windows tritonserver.exe task $taskpid"
-#                    windows-kill.exe -SIGINT $taskpid
-                fi
-            done
-        fi
+        echo "=== sending sigint to tritonserver.exe task $SERVER_WIN_PID"
+        windows-kill.exe -SIGINT $SERVER_WIN_PID
 
+        # Restore -x
         eval "$ts"
-    else
-        # Non-windows...
-        kill $SERVER_PID
-        wait $SERVER_PID
     fi
+    
+    kill $SERVER_PID
+    wait $SERVER_PID
 }
 
 # Run nvidia-smi to monitor GPU utilization.

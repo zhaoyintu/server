@@ -88,10 +88,53 @@ AsyncWorkQueue::AddTask(const std::function<void(void)>&& task)
   return Status::Success;
 }
 
+Status
+AsyncWorkQueue::AddBundledTask(const std::function<void(size_t)>&& task)
+{
+  auto singleton = GetSingleton();
+  if (singleton->worker_threads_.size() == 0) {
+    return Status(
+        Status::Code::UNAVAILABLE,
+        "Async work queue must be initialized before adding task");
+  }
+  {
+    std::lock_guard<std::mutex> lk(singleton->mtx_);
+    singleton->bundled_task_queue_.push_back(std::move(task));
+  }
+  if (singleton->task_queue_.Empty()) {
+    singleton->SplitBundledTasks();
+  }
+  return Status::Success;
+}
+
+void
+AsyncWorkQueue::SplitBundledTasks()
+{
+  std::deque<std::function<void(size_t)>> local_bundled_task_queue;
+  {
+    std::lock_guard<std::mutex> lk(mtx_);
+    // Only swap the queue if it is not empty, otherwise, other thread entered
+    // this function concurrently and take the job of splitting the tasks
+    if (!bundled_task_queue_.empty()) {
+      bundled_task_queue_.swap(local_bundled_task_queue);
+    }
+  }
+  if (!local_bundled_task_queue.empty()) {
+    size_t thread_per_task = std::max((size_t)1, worker_threads_.size() / local_bundled_task_queue.size());
+    while (!local_bundled_task_queue.empty()) {
+      local_bundled_task_queue.front()(thread_per_task);
+      local_bundled_task_queue.pop_front();
+    }
+  }
+}
+
 void
 AsyncWorkQueue::WorkThread()
 {
   while (true) {
+    if (GetSingleton()->task_queue_.Empty()) {
+      GetSingleton()->SplitBundledTasks();
+    }
     auto task = GetSingleton()->task_queue_.Get();
     if (task != nullptr) {
       task();

@@ -54,14 +54,24 @@ class AsyncWorkQueue {
   // Therefore std::move should be used when calling AddTask.
   static Status AddTask(const std::function<void(void)>&& task);
 
+  // Add a bundled 'task' to the queue. The work queue will decide how many
+  // subtasks to divide the bundled task into and call 'task' with the amount
+  // of the subtasks as the argument. 'task' should properly set and assign the
+  // subtasks by calling AddTask. The function will take ownership of
+  // 'task'. Therefore std::move should be used when calling AddBundledTask.
+  static Status AddBundledTask(const std::function<void(size_t)>&& task);
+
  private:
   AsyncWorkQueue() = default;
   ~AsyncWorkQueue();
   static AsyncWorkQueue* GetSingleton();
   static void WorkThread();
+  void SplitBundledTasks();
 
+  std::mutex mtx_;
   std::vector<std::unique_ptr<std::thread>> worker_threads_;
   SyncQueue<std::function<void(void)>> task_queue_;
+  std::deque<std::function<void(size_t)>> bundled_task_queue_;
 };
 
 }}  // namespace nvidia::inferenceserver
